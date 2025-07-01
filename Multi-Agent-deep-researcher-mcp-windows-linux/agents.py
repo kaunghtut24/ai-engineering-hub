@@ -30,9 +30,9 @@ def get_llm_client(llm_provider: str, model: str, openai_api_key: str = None, op
         if not openai_base_url:
             raise ValueError("Base URL is required for OpenAI Compatible models.")
         return LLM(
-            model=model,
-            openai_api_key=openai_api_key,
-            base_url=openai_base_url
+            model=f"openai/{model}",
+            api_key=openai_api_key,
+            api_base=openai_base_url
         )
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
