@@ -1,18 +1,60 @@
 import streamlit as st
 from agents import run_research
 import os
+import weasyprint
+from markdown_it import MarkdownIt
+import pyperclip
+import json
+import requests
 
 # Set up page configuration
 st.set_page_config(page_title="🔍 Agentic Deep Researcher", layout="wide")
 
+# --- Persistence --- #
+
+USER_DATA_FILE = "user_data.json"
+
+def save_user_data():
+    data = {
+        "linkup_api_key": st.session_state.linkup_api_key,
+        "selected_model": st.session_state.selected_model,
+        "messages": st.session_state.messages,
+    }
+    with open(USER_DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+def load_user_data():
+    if os.path.exists(USER_DATA_FILE):
+        with open(USER_DATA_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+# --- Model Selection --- #
+
+@st.cache_data
+def get_ollama_models():
+    try:
+        response = requests.get("http://localhost:11434/api/tags")
+        response.raise_for_status()
+        return [model["name"] for model in response.json()["models"]]
+    except Exception as e:
+        st.error(f"Could not get Ollama models: {e}")
+        return ["ollama/qwen3:8b", "ollama/llama2", "ollama/codellama"]
+
+# --- App --- #
+
 # Initialize session state variables
-if "linkup_api_key" not in st.session_state:
-    st.session_state.linkup_api_key = ""
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+user_data = load_user_data()
+st.session_state.linkup_api_key = user_data.get("linkup_api_key", "")
+st.session_state.selected_model = user_data.get("selected_model", "ollama/qwen3:8b")
+st.session_state.messages = user_data.get("messages", [])
 
 def reset_chat():
     st.session_state.messages = []
+    save_user_data()
+
+def to_pdf(html_string):
+    return weasyprint.HTML(string=html_string).write_pdf()
 
 # Sidebar: Linkup Configuration with updated logo link
 with st.sidebar:
@@ -29,12 +71,21 @@ with st.sidebar:
                 unsafe_allow_html=True)
 
     linkup_api_key = st.text_input(
-        "Enter your Linkup API Key", type="password")
+        "Enter your Linkup API Key", type="password", value=st.session_state.linkup_api_key)
     if linkup_api_key:
         st.session_state.linkup_api_key = linkup_api_key
-        # Update the environment variable
         os.environ["LINKUP_API_KEY"] = linkup_api_key
         st.success("API Key stored successfully!")
+        save_user_data()
+
+    st.header("Model Selection")
+    models = get_ollama_models()
+    selected_model_raw = st.selectbox("Select a model", models, index=models.index(st.session_state.selected_model) if st.session_state.selected_model in models else 0)
+    if not selected_model_raw.startswith("ollama/"):
+        st.session_state.selected_model = f"ollama/{selected_model_raw}"
+    else:
+        st.session_state.selected_model = selected_model_raw
+    save_user_data()
 
 # Main Chat Interface Header with powered by logos from original code links
 col1, col2 = st.columns([6, 1])
@@ -60,6 +111,20 @@ st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message["role"] == "assistant":
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="Save as PDF",
+                    data=to_pdf(MarkdownIt().render(message["content"])),
+                    file_name="research_report.pdf",
+                    mime="application/pdf",
+                )
+            with col2:
+                if st.button("Copy", key=f"copy_{message['content']}"):
+                    pyperclip.copy(message["content"])
+                    st.success("Copied to clipboard!")
+
 
 # Accept user input and process the research query
 if prompt := st.chat_input("Ask a question about your documents..."):
@@ -72,12 +137,27 @@ if prompt := st.chat_input("Ask a question about your documents..."):
     else:
         with st.spinner("Researching... This may take a moment..."):
             try:
-                result = run_research(prompt)
+                result = run_research(prompt, st.session_state.selected_model)
                 response = result
             except Exception as e:
                 response = f"An error occurred: {str(e)}"
 
     with st.chat_message("assistant"):
         st.markdown(response)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                label="Save as PDF",
+                data=to_pdf(MarkdownIt().render(response)),
+                file_name="research_report.pdf",
+                mime="application/pdf",
+            )
+        with col2:
+            if st.button("Copy", key=f"copy_{response}"):
+                pyperclip.copy(response)
+                st.success("Copied to clipboard!")
+
     st.session_state.messages.append(
         {"role": "assistant", "content": response})
+    save_user_data()
+

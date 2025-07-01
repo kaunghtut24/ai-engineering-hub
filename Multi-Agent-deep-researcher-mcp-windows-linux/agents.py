@@ -10,10 +10,10 @@ from crewai.tools import BaseTool
 load_dotenv()
 
 
-def get_llm_client():
+def get_llm_client(model: str):
     """Initialize and return the LLM client"""
     return LLM(
-        model="ollama/deepseek-r1:7b",
+        model=model,
         base_url="http://localhost:11434"
     )
 
@@ -55,18 +55,18 @@ class LinkUpSearchTool(BaseTool):
             return f"Error occurred while searching: {str(e)}"
 
 
-def create_research_crew(query: str):
+def create_research_crew(query: str, model: str):
     """Create and configure the research crew with all agents and tasks"""
     # Initialize tools
     linkup_search_tool = LinkUpSearchTool()
 
     # Get LLM client
-    client = get_llm_client()
+    client = get_llm_client(model)
 
     web_searcher = Agent(
         role="Web Searcher",
-        goal="Find the most relevant information on the web, along with source links (urls).",
-        backstory="An expert at formulating search queries and retrieving relevant information. Passes the results to the 'Research Analyst' only.",
+        goal="Find the most relevant and comprehensive information on the web, along with source links (urls). Your search should be deep and wide, covering multiple perspectives and sources.",
+        backstory="A master of the internet, capable of finding any information, no matter how obscure. You are a relentless researcher, always digging deeper to find the truth. You pass your findings to the 'Research Analyst'.",
         verbose=True,
         allow_delegation=True,
         tools=[linkup_search_tool],
@@ -76,8 +76,8 @@ def create_research_crew(query: str):
     # Define the research analyst
     research_analyst = Agent(
         role="Research Analyst",
-        goal="Analyze and synthesize raw information into structured insights, along with source links (urls) as citations.",
-        backstory="An expert at analyzing information, identifying patterns, and extracting key insights. If required, can delagate the task of fact checking/verification to 'Web Searcher' only. Passes the final results to the 'Technical Writer' only.",
+        goal="Analyze and synthesize raw information into structured, insightful, and comprehensive reports, along with source links (urls) as citations. Your analysis should be critical and well-supported by evidence.",
+        backstory="A brilliant analyst, you can see the patterns that others miss. You are an expert at identifying key insights, verifying facts, and presenting complex information in a clear and concise manner. You can delegate fact-checking to the 'Web Searcher'. You pass your final analysis to the 'Technical Writer'.",
         verbose=True,
         allow_delegation=True,
         llm=client,
@@ -86,8 +86,8 @@ def create_research_crew(query: str):
     # Define the technical writer
     technical_writer = Agent(
         role="Technical Writer",
-        goal="Create well-structured, clear, and comprehensive responses in markdown format, with citations/source links (urls).",
-        backstory="An expert at communicating complex information in an accessible way.",
+        goal="Create well-structured, clear, lengthy, and comprehensive responses in markdown format, with citations/source links (urls). Your writing should be engaging and informative, providing a deep dive into the topic.",
+        backstory="A master of words, you can make any topic interesting and understandable. You are an expert at crafting compelling narratives and presenting information in a way that is both accessible and authoritative.",
         verbose=True,
         allow_delegation=False,
         llm=client,
@@ -95,23 +95,23 @@ def create_research_crew(query: str):
 
     # Define tasks
     search_task = Task(
-        description=f"Search for comprehensive information about: {query}.",
+        description=f"Search for comprehensive and in-depth information about: {query}.",
         agent=web_searcher,
-        expected_output="Detailed raw search results including sources (urls).",
+        expected_output="A detailed report of raw search results, including a wide range of sources with URLs. The report should be organized and easy to read.",
         tools=[linkup_search_tool]
     )
 
     analysis_task = Task(
-        description="Analyze the raw search results, identify key information, verify facts and prepare a structured analysis.",
+        description="Analyze the raw search results, identify key information, verify facts, and prepare a structured and comprehensive analysis. The analysis should be well-supported by evidence and include multiple perspectives.",
         agent=research_analyst,
-        expected_output="A structured analysis of the information with verified facts and key insights, along with source links",
+        expected_output="A comprehensive and insightful analysis of the information, with verified facts, key insights, and source links. The analysis should be structured and easy to follow.",
         context=[search_task]
     )
 
     writing_task = Task(
-        description="Create a comprehensive, well-organized response based on the research analysis.",
+        description="Create a lengthy, comprehensive, and well-organized response based on the research analysis. The response should be in markdown format and include proper citations/source links (urls).",
         agent=technical_writer,
-        expected_output="A clear, comprehensive response that directly answers the query with proper citations/source links (urls).",
+        expected_output="A clear, lengthy, and comprehensive response that directly answers the query with proper citations/source links (urls). The response should be well-structured, engaging, and provide a deep dive into the topic.",
         context=[analysis_task]
     )
 
@@ -126,11 +126,18 @@ def create_research_crew(query: str):
     return crew
 
 
-def run_research(query: str):
+def run_research(query: str, model: str):
     """Run the research process and return results"""
+    print(f"Starting research for query: {query} with model: {model}")
     try:
-        crew = create_research_crew(query)
+        crew = create_research_crew(query, model)
+        print("Crew created successfully.")
         result = crew.kickoff()
+        print("Crew kickoff completed.")
         return result.raw
     except Exception as e:
+        print(f"An error occurred during research: {e}")
+        import traceback
+        traceback.print_exc()
         return f"Error: {str(e)}"
+
