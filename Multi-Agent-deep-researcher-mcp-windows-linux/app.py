@@ -19,6 +19,9 @@ def save_user_data():
     data = {
         "linkup_api_key": st.session_state.linkup_api_key,
         "selected_model": st.session_state.selected_model,
+        "selected_llm_provider": st.session_state.selected_llm_provider,
+        "openai_api_key": st.session_state.openai_api_key,
+        "openai_base_url": st.session_state.openai_base_url,
         "messages": st.session_state.messages,
         "uploaded_document_content": st.session_state.uploaded_document_content
     }
@@ -48,7 +51,10 @@ def get_ollama_models():
 # Initialize session state variables
 user_data = load_user_data()
 st.session_state.linkup_api_key = user_data.get("linkup_api_key", "")
-st.session_state.selected_model = user_data.get("selected_model", "ollama/qwen3:8b")
+st.session_state.selected_model = user_data.get("selected_model", "gpt-4o")
+st.session_state.selected_llm_provider = user_data.get("selected_llm_provider", "OpenAI")
+st.session_state.openai_api_key = user_data.get("openai_api_key", "")
+st.session_state.openai_base_url = user_data.get("openai_base_url", "https://api.openai.com/v1")
 st.session_state.messages = user_data.get("messages", [])
 st.session_state.uploaded_document_content = user_data.get("uploaded_document_content", "")
 
@@ -82,14 +88,46 @@ with st.sidebar:
         st.success("API Key stored successfully!")
         save_user_data()
 
-    st.header("Model Selection")
-    models = get_ollama_models()
-    selected_model_raw = st.selectbox("Select a model", models, index=models.index(st.session_state.selected_model) if st.session_state.selected_model in models else 0)
-    if not selected_model_raw.startswith("ollama/"):
-        st.session_state.selected_model = f"ollama/{selected_model_raw}"
-    else:
-        st.session_state.selected_model = selected_model_raw
+    st.header("LLM Provider")
+    llm_providers = ["Ollama", "OpenAI", "OpenAI Compatible"]
+    st.session_state.selected_llm_provider = st.selectbox("Select LLM Provider", llm_providers, index=llm_providers.index(st.session_state.selected_llm_provider))
     save_user_data()
+
+    if st.session_state.selected_llm_provider == "Ollama":
+        st.header("Ollama Model Selection")
+        models = get_ollama_models()
+        selected_model_raw = st.selectbox("Select a model", models, index=models.index(st.session_state.selected_model) if st.session_state.selected_model in models else 0)
+        if not selected_model_raw.startswith("ollama/"):
+            st.session_state.selected_model = f"ollama/{selected_model_raw}"
+        else:
+            st.session_state.selected_model = selected_model_raw
+        save_user_data()
+    elif st.session_state.selected_llm_provider == "OpenAI":
+        st.header("OpenAI Configuration")
+        openai_api_key = st.text_input(
+            "Enter your OpenAI API Key", type="password", value=st.session_state.openai_api_key)
+        if openai_api_key:
+            st.session_state.openai_api_key = openai_api_key
+            os.environ["OPENAI_API_KEY"] = openai_api_key
+            st.success("OpenAI API Key stored successfully!")
+            save_user_data()
+        st.session_state.selected_model = st.text_input("Enter OpenAI Model Name", value=st.session_state.selected_model if st.session_state.selected_model else "gpt-4o")
+        save_user_data()
+    elif st.session_state.selected_llm_provider == "OpenAI Compatible":
+        st.header("OpenAI Compatible Configuration")
+        openai_api_key = st.text_input(
+            "Enter your API Key", type="password", value=st.session_state.openai_api_key)
+        if openai_api_key:
+            st.session_state.openai_api_key = openai_api_key
+            os.environ["OPENAI_API_KEY"] = openai_api_key
+            st.success("API Key stored successfully!")
+            save_user_data()
+        openai_base_url = st.text_input("Enter Base URL", value=st.session_state.openai_base_url)
+        if openai_base_url:
+            st.session_state.openai_base_url = openai_base_url
+            save_user_data()
+        st.session_state.selected_model = st.text_input("Enter Model Name", value=st.session_state.selected_model if st.session_state.selected_model else "gpt-4o")
+        save_user_data()
 
     st.header("Document Upload")
     uploaded_file = st.file_uploader("Upload a document (TXT, MD)", type=["txt", "md"])
@@ -152,7 +190,14 @@ if prompt := st.chat_input("Ask a question about your documents..."):
     else:
         with st.spinner("Researching... This may take a moment..."):
             try:
-                result = run_research(prompt, st.session_state.selected_model, st.session_state.uploaded_document_content)
+                result = run_research(
+                    prompt,
+                    st.session_state.selected_llm_provider,
+                    st.session_state.selected_model,
+                    st.session_state.openai_api_key,
+                    st.session_state.openai_base_url,
+                    st.session_state.uploaded_document_content
+                )
                 response = result
             except Exception as e:
                 response = f"An error occurred: {str(e)}"
