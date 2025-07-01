@@ -55,7 +55,7 @@ class LinkUpSearchTool(BaseTool):
             return f"Error occurred while searching: {str(e)}"
 
 
-def create_research_crew(query: str, model: str):
+def create_research_crew(query: str, model: str, document_content: str = ""):
     """Create and configure the research crew with all agents and tasks"""
     # Initialize tools
     linkup_search_tool = LinkUpSearchTool()
@@ -101,8 +101,12 @@ def create_research_crew(query: str, model: str):
         tools=[linkup_search_tool]
     )
 
+    analysis_task_description = "Analyze the raw search results, identify key information, verify facts, and prepare a structured and comprehensive analysis. The analysis should be well-supported by evidence and include multiple perspectives."
+    if document_content:
+        analysis_task_description += f"\n\nAdditional context from uploaded document:\n\n```\n{document_content}\n```"
+
     analysis_task = Task(
-        description="Analyze the raw search results, identify key information, verify facts, and prepare a structured and comprehensive analysis. The analysis should be well-supported by evidence and include multiple perspectives.",
+        description=analysis_task_description,
         agent=research_analyst,
         expected_output="A comprehensive and insightful analysis of the information, with verified facts, key insights, and source links. The analysis should be structured and easy to follow.",
         context=[search_task]
@@ -126,11 +130,11 @@ def create_research_crew(query: str, model: str):
     return crew
 
 
-def run_research(query: str, model: str):
+def run_research(query: str, model: str, document_content: str = ""):
     """Run the research process and return results"""
     print(f"Starting research for query: {query} with model: {model}")
     try:
-        crew = create_research_crew(query, model)
+        crew = create_research_crew(query, model, document_content)
         print("Crew created successfully.")
         result = crew.kickoff()
         print("Crew kickoff completed.")

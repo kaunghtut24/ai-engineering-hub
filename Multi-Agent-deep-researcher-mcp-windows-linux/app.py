@@ -6,6 +6,7 @@ from markdown_it import MarkdownIt
 import pyperclip
 import json
 import requests
+import io
 
 # Set up page configuration
 st.set_page_config(page_title="🔍 Agentic Deep Researcher", layout="wide")
@@ -19,6 +20,7 @@ def save_user_data():
         "linkup_api_key": st.session_state.linkup_api_key,
         "selected_model": st.session_state.selected_model,
         "messages": st.session_state.messages,
+        "uploaded_document_content": st.session_state.uploaded_document_content
     }
     with open(USER_DATA_FILE, "w") as f:
         json.dump(data, f)
@@ -48,9 +50,11 @@ user_data = load_user_data()
 st.session_state.linkup_api_key = user_data.get("linkup_api_key", "")
 st.session_state.selected_model = user_data.get("selected_model", "ollama/qwen3:8b")
 st.session_state.messages = user_data.get("messages", [])
+st.session_state.uploaded_document_content = user_data.get("uploaded_document_content", "")
 
 def reset_chat():
     st.session_state.messages = []
+    st.session_state.uploaded_document_content = ""
     save_user_data()
 
 def to_pdf(html_string):
@@ -87,6 +91,16 @@ with st.sidebar:
         st.session_state.selected_model = selected_model_raw
     save_user_data()
 
+    st.header("Document Upload")
+    uploaded_file = st.file_uploader("Upload a document (TXT, MD)", type=["txt", "md"])
+    if uploaded_file is not None:
+        string_io = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
+        st.session_state.uploaded_document_content = string_io.read()
+        st.success("Document uploaded successfully!")
+        save_user_data()
+    elif st.session_state.uploaded_document_content:
+        st.info("Document already loaded. Upload a new one to replace.")
+
 # Main Chat Interface Header with powered by logos from original code links
 col1, col2 = st.columns([6, 1])
 with col1:
@@ -108,7 +122,7 @@ with col2:
 st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
 
 # Display chat history
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if message["role"] == "assistant":
@@ -117,11 +131,12 @@ for message in st.session_state.messages:
                 st.download_button(
                     label="Save as PDF",
                     data=to_pdf(MarkdownIt().render(message["content"])),
-                    file_name="research_report.pdf",
+                    file_name=f"research_report_{i}.pdf",
                     mime="application/pdf",
+                    key=f"download_pdf_{i}"
                 )
             with col2:
-                if st.button("Copy", key=f"copy_{message['content']}"):
+                if st.button("Copy", key=f"copy_{i}"):
                     pyperclip.copy(message["content"])
                     st.success("Copied to clipboard!")
 
@@ -137,7 +152,7 @@ if prompt := st.chat_input("Ask a question about your documents..."):
     else:
         with st.spinner("Researching... This may take a moment..."):
             try:
-                result = run_research(prompt, st.session_state.selected_model)
+                result = run_research(prompt, st.session_state.selected_model, st.session_state.uploaded_document_content)
                 response = result
             except Exception as e:
                 response = f"An error occurred: {str(e)}"
@@ -149,11 +164,12 @@ if prompt := st.chat_input("Ask a question about your documents..."):
             st.download_button(
                 label="Save as PDF",
                 data=to_pdf(MarkdownIt().render(response)),
-                file_name="research_report.pdf",
+                file_name="research_report_latest.pdf",
                 mime="application/pdf",
+                key="download_pdf_latest"
             )
         with col2:
-            if st.button("Copy", key=f"copy_{response}"):
+            if st.button("Copy", key="copy_latest"):
                 pyperclip.copy(response)
                 st.success("Copied to clipboard!")
 
