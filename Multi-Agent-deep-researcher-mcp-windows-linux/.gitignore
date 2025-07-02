@@ -10,8 +10,5 @@ wheels/
 .venv
 *.env
 
-# Render configuration
-render.yaml
-
 # User data
 user_data.json
