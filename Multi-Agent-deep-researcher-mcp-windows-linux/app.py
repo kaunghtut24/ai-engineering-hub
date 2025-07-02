@@ -139,6 +139,8 @@ with st.sidebar:
     elif st.session_state.uploaded_document_content:
         st.info("Document already loaded. Upload a new one to replace.")
 
+    use_document = st.checkbox("Use uploaded document", value=True)
+
 # Main Chat Interface Header with powered by logos from original code links
 col1, col2 = st.columns([6, 1])
 with col1:
@@ -196,7 +198,7 @@ if prompt := st.chat_input("Ask a question about your documents..."):
                     st.session_state.selected_model,
                     st.session_state.openai_api_key,
                     st.session_state.openai_base_url,
-                    st.session_state.uploaded_document_content
+                    st.session_state.uploaded_document_content if use_document else ""
                 )
                 response = result
             except Exception as e:

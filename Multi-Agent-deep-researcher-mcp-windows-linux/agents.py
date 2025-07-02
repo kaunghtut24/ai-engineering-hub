@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field
 from linkup import LinkupClient
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import BaseTool
+import litellm
+
+import os
+os.environ['LITELLM_LOG'] = 'DEBUG'
 
 # Load environment variables (for non-LinkUp settings)
 load_dotenv()
@@ -32,7 +36,7 @@ def get_llm_client(llm_provider: str, model: str, openai_api_key: str = None, op
         return LLM(
             model=f"openai/{model}",
             api_key=openai_api_key,
-            api_base=openai_base_url
+            base_url=openai_base_url
         )
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
@@ -88,7 +92,7 @@ def create_research_crew(query: str, llm_provider: str, model: str, openai_api_k
         goal="Find the most relevant and comprehensive information on the web, along with source links (urls). Your search should be deep and wide, covering multiple perspectives and sources.",
         backstory="A master of the internet, capable of finding any information, no matter how obscure. You are a relentless researcher, always digging deeper to find the truth. You pass your findings to the 'Research Analyst'.",
         verbose=True,
-        allow_delegation=True,
+        allow_delegation=False,
         tools=[linkup_search_tool],
         llm=client,
     )
@@ -117,7 +121,7 @@ def create_research_crew(query: str, llm_provider: str, model: str, openai_api_k
     search_task = Task(
         description=f"Search for comprehensive and in-depth information about: {query}.",
         agent=web_searcher,
-        expected_output="A detailed report of raw search results, including a wide range of sources with URLs. The report should be organized and easy to read.",
+        expected_output="A detailed report of raw search results, including a wide range of sources with URLs, formatted as a plain string.",
         tools=[linkup_search_tool]
     )
 
@@ -128,7 +132,7 @@ def create_research_crew(query: str, llm_provider: str, model: str, openai_api_k
     analysis_task = Task(
         description=analysis_task_description,
         agent=research_analyst,
-        expected_output="A comprehensive and insightful analysis of the information, with verified facts, key insights, and source links. The analysis should be structured and easy to follow.",
+        expected_output="A comprehensive and insightful analysis of the information, with verified facts, key insights, and source links, formatted as a plain string.",
         context=[search_task]
     )
 
